@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#FAF7F2">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="极简英文">
+  <title>极简英文 · 读与记</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="warm">
+
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="top-header" id="topHeader">
+      <div class="brand-title">
+        <span>📖 极简英文</span>
+        <span class="brand-badge" id="wordCountBadge">0 词</span>
+      </div>
+      <div class="header-actions">
+        <button class="btn-icon" id="btnQuickTheme" title="切换主题">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+        </button>
+        <button class="btn-primary" id="btnNewArticle">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          存文章
+        </button>
+      </div>
+    </header>
+
+    <!-- TAB 1: 文章库 (Articles) -->
+    <main class="view-panel active" id="viewArticles">
+      <div class="section-header">
+        <h2 class="section-title">我的文章</h2>
+        <span style="font-size: 13px; color: var(--text-muted);" id="articleTotalCount">0 篇</span>
+      </div>
+      <div class="article-list" id="articleListContainer">
+        <!-- Rendered dynamically -->
+      </div>
+    </main>
+
+    <!-- TAB 2: 生词本 (Vocabulary) -->
+    <main class="view-panel" id="viewVocab">
+      <div class="section-header">
+        <h2 class="section-title">我的生词本</h2>
+        <span style="font-size: 13px; color: var(--text-muted);" id="vocabTotalCount">0 词</span>
+      </div>
+
+      <div class="vocab-toolbar">
+        <input type="text" class="search-input" id="vocabSearchInput" placeholder="🔍 搜索生词或释义...">
+        <select class="filter-select" id="vocabArticleFilter">
+          <option value="all">所有文章</option>
+        </select>
+      </div>
+
+      <div class="vocab-list" id="vocabListContainer">
+        <!-- Rendered dynamically -->
+      </div>
+    </main>
+
+    <!-- TAB 3: 设置与备份 (Settings) -->
+    <main class="view-panel" id="viewSettings">
+      <div class="section-header">
+        <h2 class="section-title">阅读设置与数据</h2>
+      </div>
+
+      <div class="reader-settings-box">
+        <label class="form-label">阅读底色</label>
+        <div class="theme-selector">
+          <div class="theme-pill active" data-theme-val="warm">暖阳纸</div>
+          <div class="theme-pill" data-theme-val="light">极简白</div>
+          <div class="theme-pill" data-theme-val="dark">深色夜间</div>
+        </div>
+
+        <label class="form-label" style="margin-top: 8px;">文章字体风格</label>
+        <div class="font-selector">
+          <div class="font-pill active" data-font-val="serif">优雅衬线 (Serif)</div>
+          <div class="font-pill" data-font-val="sans">现代无衬线 (Sans)</div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+          <label class="form-label">正文字号大小</label>
+          <span id="fontSizeDisplay" style="font-size:13px; color:var(--accent); font-weight:600;">18px</span>
+        </div>
+        <input type="range" id="fontSizeSlider" min="15" max="24" value="18" step="1" style="accent-color: var(--accent); width: 100%;">
+      </div>
+
+      <div class="reader-settings-box">
+        <label class="form-label">数据备份与恢复 (100%手机本地隐私安全)</label>
+        <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
+          所有文章和生词都保存在您的手机浏览器中。您可以随时导出 JSON 备份，也可以随时一键恢复。
+        </p>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn-secondary" id="btnExportData" style="flex:1;">📤 导出备份 (JSON)</button>
+          <button class="btn-secondary" id="btnImportData" style="flex:1;">📥 导入恢复</button>
+          <input type="file" id="fileImportInput" accept=".json" style="display: none;">
+        </div>
+      </div>
+
+      <div class="pwa-tip-box">
+        <strong>📱 如何像原生 App 一样添加到手机桌面？</strong>
+        <p style="margin-top: 6px;">
+          • <strong>iPhone (Safari)</strong>：点击浏览器底部中间的「分享」按钮 ➔ 选择「<strong>添加到主屏幕</strong>」即可。<br>
+          • <strong>Android (Chrome/Edge)</strong>：点击右上角三个点菜单 ➔ 选择「<strong>添加到主屏幕</strong>」或「安装应用」。<br>
+          添加后桌面将生成独立的图标，打开全屏无地址栏，完全像本地原生 App 一样！
+        </p>
+      </div>
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-tab="viewArticles">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+        </svg>
+        <span>文章</span>
+      </button>
+
+      <button class="nav-item" data-tab="viewVocab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <span class="nav-badge" id="vocabBadgeCount" style="display: none;">0</span>
+        <span>生词本</span>
+      </button>
+
+      <button class="nav-item" data-tab="viewSettings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+        <span>设置</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Fullscreen Immersive Reader View -->
+  <div class="reader-container" id="readerContainer">
+    <header class="reader-header">
+      <button class="btn-icon" id="btnReaderBack" title="返回文章列表">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+      </button>
+
+      <span style="font-size: 14px; font-weight:600; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="readerHeaderTitle">
+        阅读模式
+      </span>
+
+      <div class="reader-actions">
+        <button class="btn-icon" id="btnReaderOptions" title="阅读排版设置">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 7 4 4 20 4 20 7"></polyline>
+            <line x1="9" y1="20" x2="15" y2="20"></line>
+            <line x1="12" y1="4" x2="12" y2="20"></line>
+          </svg>
+        </button>
+        <button class="btn-icon" id="btnReaderEdit" title="编辑文章">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="reader-body">
+      <!-- Quick Typography Floating Box in Reader -->
+      <div class="reader-settings-box" id="readerTypographyBox" style="display: none;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">阅读显示偏好</span>
+          <button class="btn-icon" id="btnCloseReaderTypo" style="width:28px; height:28px;">✕</button>
+        </div>
+        <div class="theme-selector">
+          <div class="theme-pill active" data-theme-val="warm">暖阳纸</div>
+          <div class="theme-pill" data-theme-val="light">极简白</div>
+          <div class="theme-pill" data-theme-val="dark">深色夜间</div>
+        </div>
+        <div class="font-selector">
+          <div class="font-pill active" data-font-val="serif">衬线体</div>
+          <div class="font-pill" data-font-val="sans">无衬线体</div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:12px; color:var(--text-muted);">字号大小</span>
+          <div style="display:flex; gap:10px;">
+            <button class="btn-secondary" id="btnFontSmaller" style="padding:4px 12px; font-size:12px;">A-</button>
+            <button class="btn-secondary" id="btnFontBigger" style="padding:4px 12px; font-size:12px;">A+</button>
+          </div>
+        </div>
+      </div>
+
+      <h1 class="reader-article-title" id="readerArticleTitle"></h1>
+      <div class="reader-meta-bar">
+        <span id="readerArticleWords">0 词</span>
+        <span>•</span>
+        <span id="readerArticleSavedWords">0 个生词已标记</span>
+      </div>
+
+      <div class="reader-content" id="readerContentArea">
+        <!-- Interactive tokenized paragraphs rendered here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Word Inspector Bottom Sheet -->
+  <div class="bottom-sheet-backdrop" id="sheetBackdrop"></div>
+  <div class="bottom-sheet" id="wordBottomSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div>
+        <div class="sheet-word" id="sheetWord">Word</div>
+        <div class="sheet-phonetic" id="sheetPhonetic">/.../</div>
+      </div>
+      <button class="btn-icon" id="btnPronounceWord" title="点击发音" style="width:44px; height:44px; background:var(--accent-light); color:var(--accent);">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+        </svg>
+      </button>
+    </div>
+
+    <div class="sheet-body">
+      <!-- Chinese Translation / Meaning -->
+      <div class="sheet-translation-box">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="sheet-translation-label">释义 / 笔记</div>
+          <button style="background:none; border:none; font-size:11px; color:var(--accent); cursor:pointer;" id="btnToggleEditDef">修改释义</button>
+        </div>
+        <div class="sheet-translation-text" id="sheetTranslationText">查询中...</div>
+        <input type="text" class="sheet-translation-edit" id="sheetTranslationInput" placeholder="自定义中文释义或记忆笔记...">
+      </div>
+
+      <!-- Context in Article -->
+      <div class="sheet-context-box" id="sheetContextBox">
+        <strong>原句语境：</strong>
+        <p id="sheetContextText" style="margin-top: 4px;"></p>
+      </div>
+
+      <!-- English Definitions -->
+      <div class="sheet-definitions" id="sheetDefinitionsContainer"></div>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="btn-primary" id="btnToggleSaveWord" style="flex: 1; padding: 12px; font-size: 15px; justify-content: center;">
+        + 记入生词本
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal: Add / Edit Article -->
+  <div class="modal-backdrop" id="articleModalBackdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="articleModalTitle">存入新英语文章</h3>
+        <button class="btn-icon" id="btnCloseArticleModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">文章标题</label>
+          <input type="text" class="form-input" id="articleTitleInput" placeholder="例如：The Road Not Taken 或 Steve Jobs Speech">
+        </div>
+        <div class="form-group">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <label class="form-label">英语正文</label>
+            <span style="font-size:12px; color:var(--text-muted);" id="modalWordCount">0 词</span>
+          </div>
+          <textarea class="form-textarea" id="articleContentInput" placeholder="在此处直接粘贴或输入你的英文文章..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btnCancelArticleModal">取消</button>
+        <button class="btn-primary" id="btnSaveArticle">保存并开始阅读</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container">
+    <div class="toast" id="toastMsg">已保存</div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
