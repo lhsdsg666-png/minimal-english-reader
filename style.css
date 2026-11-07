@@ -440,6 +440,49 @@ html, body {
   gap: 8px;
 }
 
+/* Translation Toggle Button */
+.btn-translate {
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.btn-translate.active {
+  color: var(--accent) !important;
+  background-color: var(--accent-light) !important;
+}
+
+.btn-translate.loading {
+  opacity: 0.6;
+  pointer-events: none;
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
+/* Paragraph Translation Box */
+.para-translation {
+  display: none;
+  margin-top: -0.7em;
+  margin-bottom: 1.6em;
+  padding: 10px 14px;
+  background-color: var(--bg-hover);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: calc(var(--article-font-size) - 2px);
+  line-height: 1.65;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  letter-spacing: 0.2px;
+}
+
+.reader-content.show-translation .para-translation {
+  display: block;
+  animation: fadeIn 0.22s ease;
+}
+
 .reader-body {
   max-width: 660px;
   margin: 0 auto;

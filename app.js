@@ -12,6 +12,11 @@ const DEFAULT_ARTICLE = {
 And most important, have the courage to follow your heart and intuition. They somehow already know what you truly want to become. Everything else is secondary.
 
 Stay Hungry. Stay Foolish. I have always wished that for myself. And now, as you graduate to begin anew, I wish that for you.`,
+  translation: `你的时间有限，所以不要浪费时间去过别人的生活。不要被教条所束缚——那意味着生活在别人思考的结果里。不要让其他人观点的杂音淹没你内心的声音。
+
+最重要的是，要有勇气跟随你的心与直觉。它们早已在某种程度上知晓你真正渴望成为怎样的人。其余的一切都是次要的。
+
+求知若饥，虚心若愚。我一直以此自勉。如今在你们毕业重新启程之际，我亦将此作为对你们的期许。`,
   createdAt: new Date().toISOString()
 };
 
@@ -56,6 +61,7 @@ class AppState {
     this.cache = this.loadStorage('minimal_word_cache', {});
     this.currentArticleId = null;
     this.activeInspectorWord = null;
+    this.showTranslation = false;
   }
 
   loadStorage(key, fallback) {
@@ -490,8 +496,19 @@ function openReader(articleId) {
   wordsEl.textContent = `${totalWords} 词`;
   savedWordsEl.textContent = `${unknownInArticle.length} 个生词已标记`;
 
+  // Reset translation toggle state
+  state.showTranslation = false;
+  contentArea.classList.remove('show-translation');
+  const btnTranslate = document.getElementById('btnToggleTranslate');
+  if (btnTranslate) {
+    btnTranslate.classList.remove('active', 'loading');
+    const span = btnTranslate.querySelector('span');
+    if (span) span.textContent = '译';
+  }
+
   // Parse paragraphs and token words
   const paragraphs = article.content.split(/\n\s*\n/);
+  const transParagraphs = article.translation ? article.translation.split(/\n\s*\n/) : [];
   
   contentArea.innerHTML = paragraphs.map((para, pIdx) => {
     // Regex splits by word boundaries while preserving whitespace and symbols
@@ -512,7 +529,8 @@ function openReader(articleId) {
       }
     }).join('');
 
-    return `<p data-p="${pIdx}">${tokenHtml}</p>`;
+    const transText = transParagraphs[pIdx] || '';
+    return `<p data-p="${pIdx}">${tokenHtml}</p><div class="para-translation" data-p="${pIdx}">${escapeHtml(transText)}</div>`;
   }).join('');
 
   readerContainer.classList.add('active');
@@ -523,8 +541,103 @@ function closeReader() {
   const readerContainer = document.getElementById('readerContainer');
   readerContainer.classList.remove('active');
   state.currentArticleId = null;
+  state.showTranslation = false;
   renderArticleList();
   renderVocabList();
+}
+
+// 4.1 One-Click Full Article Translation (DeepSeek)
+async function toggleArticleTranslation() {
+  if (!state.currentArticleId) return;
+  const article = state.articles.find(a => a.id === state.currentArticleId);
+  if (!article) return;
+
+  const btn = document.getElementById('btnToggleTranslate');
+  const contentArea = document.getElementById('readerContentArea');
+  const span = btn?.querySelector('span');
+
+  // 1. If currently showing, hide it
+  if (state.showTranslation) {
+    state.showTranslation = false;
+    contentArea.classList.remove('show-translation');
+    btn?.classList.remove('active');
+    showToast('已隐藏中文对照');
+    return;
+  }
+
+  // 2. If article already has cached translation, show immediately (0ms)
+  if (article.translation) {
+    state.showTranslation = true;
+    contentArea.classList.add('show-translation');
+    btn?.classList.add('active');
+    showToast('已开启中英对照');
+    return;
+  }
+
+  // 3. Needs DeepSeek translation
+  if (!state.settings.deepseekKey) {
+    showToast('请先在【设置】中填入 DeepSeek API Key 即可一键全文翻译');
+    return;
+  }
+
+  btn?.classList.add('loading');
+  if (span) span.textContent = '...';
+  showToast('🤖 DeepSeek 正在翻译全文，请稍候...');
+
+  try {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.settings.deepseekKey.trim()}`
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          {
+            role: 'system',
+            content: '你是一位精通中英双语的文学级翻译专家。请将用户提供的英文文章翻译为通顺、地道、优雅的中文。\n【极其重要要求】：必须与原文的段落结构严格一一对应，每个段落之间用两个换行符(\\n\\n)分隔。不要输出任何额外的开场白、解说、标题或 Markdown 标记，只输出对应翻译后的中文段落。'
+          },
+          {
+            role: 'user',
+            content: article.content
+          }
+        ],
+        temperature: 0.3
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const translatedText = data.choices[0]?.message?.content?.trim() || '';
+
+    if (!translatedText) throw new Error('翻译结果为空');
+
+    // Save translation into article
+    article.translation = translatedText;
+    state.saveArticles();
+
+    // Attach translation to DOM
+    const transParagraphs = translatedText.split(/\n\s*\n/);
+    document.querySelectorAll('.para-translation').forEach((el, idx) => {
+      el.textContent = transParagraphs[idx] || (idx === 0 ? translatedText : '');
+    });
+
+    state.showTranslation = true;
+    contentArea.classList.add('show-translation');
+    btn?.classList.add('active');
+    showToast('✨ 全文翻译完成！已开启中英对照');
+  } catch (err) {
+    console.error('Full text translation error:', err);
+    showToast(`全文翻译失败：${err.message || '网络错误'}`);
+  } finally {
+    btn?.classList.remove('loading');
+    if (span) span.textContent = '译';
+  }
 }
 
 // 5. Word Inspector Sheet
@@ -749,6 +862,9 @@ function saveArticleFromModal() {
   if (editId) {
     const index = state.articles.findIndex(a => a.id === editId);
     if (index >= 0) {
+      if (state.articles[index].content !== content) {
+        delete state.articles[index].translation;
+      }
       state.articles[index].title = title;
       state.articles[index].content = content;
       state.saveArticles();
@@ -912,6 +1028,7 @@ function setupEventListeners() {
 
   // Reader interactions
   document.getElementById('btnReaderBack')?.addEventListener('click', closeReader);
+  document.getElementById('btnToggleTranslate')?.addEventListener('click', toggleArticleTranslation);
   document.getElementById('btnReaderEdit')?.addEventListener('click', () => {
     if (state.currentArticleId) openNewArticleModal(state.currentArticleId);
   });
