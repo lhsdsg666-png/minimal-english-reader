@@ -43,7 +43,8 @@ const DEFAULT_WORDS = [
 const DEFAULT_SETTINGS = {
   theme: 'warm',
   fontFamily: 'serif',
-  fontSize: 18
+  fontSize: 18,
+  deepseekKey: ''
 };
 
 // --- State Management ---
@@ -52,6 +53,7 @@ class AppState {
     this.articles = this.loadStorage('minimal_articles', [DEFAULT_ARTICLE]);
     this.words = this.loadStorage('minimal_words', DEFAULT_WORDS);
     this.settings = this.loadStorage('minimal_settings', DEFAULT_SETTINGS);
+    this.cache = this.loadStorage('minimal_word_cache', {});
     this.currentArticleId = null;
     this.activeInspectorWord = null;
   }
@@ -76,6 +78,19 @@ class AppState {
 
   saveSettings() {
     localStorage.setItem('minimal_settings', JSON.stringify(this.settings));
+  }
+
+  getCached(word, sentence) {
+    const key = `${word.toLowerCase().trim()}:::${(sentence || '').slice(0, 50)}`;
+    return this.cache[key] || null;
+  }
+
+  setCached(word, sentence, data) {
+    const key = `${word.toLowerCase().trim()}:::${(sentence || '').slice(0, 50)}`;
+    this.cache[key] = data;
+    try {
+      localStorage.setItem('minimal_word_cache', JSON.stringify(this.cache));
+    } catch (e) {}
   }
 
   getWord(wordStr) {
@@ -125,33 +140,83 @@ function showToast(msg) {
   }, 2200);
 }
 
-// --- Dictionary API Lookup ---
-async function fetchWordDefinition(word) {
+// --- Word Lookup Service (DeepSeek AI & Fast Fallback) ---
+
+async function fetchDeepSeekDefinition(word, sentence, apiKey) {
+  const normWord = word.toLowerCase().trim();
+  const cleanSentence = sentence ? sentence.trim() : '';
+
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey.trim()}`
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        {
+          role: 'system',
+          content: '你是一个专业的英语阅读与词典专家。请根据用户提供的英文单词和上下文句子，给出：\n1. phonetic: 国际音标（格式如 /ˈdɒɡmə/）\n2. contextMeaning: 结合上下文句子语境最精准贴切的中文含义（针对本文具体意思，简练准确）\n3. briefMeaning: 该单词常见词性及常规释义（如 n. 教条；信条）\n请严格只输出纯 JSON，必须包含这三个字段：{"phonetic":"...","contextMeaning":"...","briefMeaning":"..."}'
+        },
+        {
+          role: 'user',
+          content: `单词: ${normWord}\n上下文句子: ${cleanSentence || '无'}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.1,
+      max_tokens: 150
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const parsed = JSON.parse(data.choices[0]?.message?.content || '{}');
+  return {
+    word: normWord,
+    phonetic: parsed.phonetic || '',
+    contextMeaning: parsed.contextMeaning || '',
+    translation: parsed.briefMeaning || parsed.contextMeaning || '',
+    isAi: true
+  };
+}
+
+async function fetchBaseDefinition(word) {
   const normWord = word.toLowerCase().trim();
   const result = {
     word: normWord,
     phonetic: '',
     meanings: [],
-    translation: ''
+    translation: '',
+    contextMeaning: '',
+    isAi: false
   };
 
   try {
-    // 1. Fetch from Free Dictionary API (English definitions and phonetics)
     const dictPromise = fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(normWord)}`)
       .then(res => res.ok ? res.json() : null)
       .catch(() => null);
 
-    // 2. Fetch Chinese Translation from MyMemory
-    const transPromise = fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(normWord)}&langpair=en|zh-CN`)
+    // MyMemory with 3.5s timeout abort
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const transPromise = fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(normWord)}&langpair=en|zh-CN`, {
+      signal: controller.signal
+    })
       .then(res => res.ok ? res.json() : null)
-      .catch(() => null);
+      .catch(() => null)
+      .finally(() => clearTimeout(timeoutId));
 
     const [dictData, transData] = await Promise.all([dictPromise, transPromise]);
 
     if (dictData && Array.isArray(dictData) && dictData.length > 0) {
       const entry = dictData[0];
       result.phonetic = entry.phonetic || (entry.phonetics && entry.phonetics.find(p => p.text)?.text) || '';
-      
       if (entry.meanings) {
         result.meanings = entry.meanings.slice(0, 3).map(m => ({
           partOfSpeech: m.partOfSpeech,
@@ -163,16 +228,37 @@ async function fetchWordDefinition(word) {
 
     if (transData && transData.responseData && transData.responseData.translatedText) {
       const trans = transData.responseData.translatedText;
-      // Filter out auto-translation error garbage if any
-      if (!trans.toUpperCase().includes('QUERY LENGTH') && !trans.toUpperCase().includes('INVALID')) {
+      if (!trans.toUpperCase().includes('QUERY LENGTH') && !trans.toUpperCase().includes('INVALID') && !trans.toUpperCase().includes('MYMEMORY')) {
         result.translation = trans;
       }
     }
   } catch (err) {
-    console.warn('Word fetch error:', err);
+    console.warn('Base fetch error:', err);
   }
 
   return result;
+}
+
+// Quick validation ping for DeepSeek Key
+async function testDeepSeekKey(apiKey) {
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey.trim()}`
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [{ role: 'user', content: 'hi' }],
+      max_tokens: 5
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+  }
+  return true;
 }
 
 // --- UI Rendering ---
@@ -198,6 +284,28 @@ function applySettings() {
   if (fontDisplay) fontDisplay.textContent = `${state.settings.fontSize}px`;
   const fontSlider = document.getElementById('fontSizeSlider');
   if (fontSlider) fontSlider.value = state.settings.fontSize;
+
+  // DeepSeek UI state in Settings
+  const keyInput = document.getElementById('inputDeepseekKey');
+  const statusTag = document.getElementById('deepseekStatusTag');
+  const btnClear = document.getElementById('btnClearDeepseekKey');
+
+  if (keyInput && state.settings.deepseekKey) {
+    keyInput.value = state.settings.deepseekKey;
+    if (statusTag) {
+      statusTag.textContent = '已开启 ✓';
+      statusTag.style.backgroundColor = 'var(--success-light)';
+      statusTag.style.color = 'var(--success)';
+    }
+    if (btnClear) btnClear.style.display = 'block';
+  } else if (keyInput) {
+    if (statusTag) {
+      statusTag.textContent = '未开启';
+      statusTag.style.backgroundColor = 'var(--accent-light)';
+      statusTag.style.color = 'var(--accent)';
+    }
+    if (btnClear) btnClear.style.display = 'none';
+  }
 }
 
 // 2. Render Article List
@@ -441,18 +549,20 @@ async function inspectWord(word, contextSentence) {
   const backdrop = document.getElementById('sheetBackdrop');
   const sheetWord = document.getElementById('sheetWord');
   const sheetPhonetic = document.getElementById('sheetPhonetic');
+  const sheetTransSourceLabel = document.getElementById('sheetTransSourceLabel');
+  const sheetAiContextBox = document.getElementById('sheetAiContextBox');
+  const sheetAiContextText = document.getElementById('sheetAiContextText');
   const sheetTransText = document.getElementById('sheetTranslationText');
   const sheetTransInput = document.getElementById('sheetTranslationInput');
   const sheetContextText = document.getElementById('sheetContextText');
   const sheetDefsContainer = document.getElementById('sheetDefinitionsContainer');
-  const btnSave = document.getElementById('btnToggleSaveWord');
 
   sheetWord.textContent = word;
   sheetPhonetic.textContent = existing?.phonetic || '...';
-  sheetTransText.textContent = existing?.translation || '正在查询释义...';
   sheetTransInput.value = existing?.translation || '';
   sheetTransInput.style.display = 'none';
   sheetDefsContainer.innerHTML = '';
+  sheetAiContextBox.style.display = 'none';
 
   // Context sentence with highlight
   if (contextSentence) {
@@ -472,34 +582,99 @@ async function inspectWord(word, contextSentence) {
   // Automatically pronounce
   speakWord(word);
 
-  // If not in wordbook or missing translation, fetch from API
-  if (!existing || !existing.translation) {
-    const fetched = await fetchWordDefinition(norm);
-    if (state.activeInspectorWord && state.activeInspectorWord.word === norm) {
-      if (fetched.phonetic) {
-        state.activeInspectorWord.phonetic = fetched.phonetic;
-        sheetPhonetic.textContent = fetched.phonetic;
-      }
-      if (fetched.translation) {
-        state.activeInspectorWord.translation = fetched.translation;
-        sheetTransText.textContent = fetched.translation;
-        sheetTransInput.value = fetched.translation;
-      } else if (!existing) {
-        sheetTransText.textContent = '轻点此处手动输入中文释义';
-      }
+  // If already in vocabulary, display directly
+  if (existing && existing.translation) {
+    sheetTransSourceLabel.innerHTML = '已存生词笔记';
+    sheetTransText.textContent = existing.translation;
+    return;
+  }
 
-      // Render English definitions
-      if (fetched.meanings && fetched.meanings.length > 0) {
-        sheetDefsContainer.innerHTML = `
-          <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase;">英英简释</div>
-          ${fetched.meanings.map(m => `
-            <div class="def-item">
-              <span class="def-pos">${escapeHtml(m.partOfSpeech)}</span>
-              <span>${escapeHtml(m.definition)}</span>
-            </div>
-          `).join('')}
-        `;
+  // Check cache first (0ms instant response)
+  const cached = state.getCached(norm, contextSentence);
+  if (cached) {
+    if (cached.phonetic) sheetPhonetic.textContent = cached.phonetic;
+    state.activeInspectorWord.phonetic = cached.phonetic;
+    state.activeInspectorWord.translation = cached.translation;
+    sheetTransInput.value = cached.contextMeaning || cached.translation;
+
+    if (cached.isAi && cached.contextMeaning) {
+      sheetTransSourceLabel.innerHTML = '🤖 DeepSeek 语境分析 <span class="badge-ai">AI精准</span>';
+      sheetAiContextBox.style.display = 'block';
+      sheetAiContextText.textContent = cached.contextMeaning;
+      sheetTransText.textContent = cached.translation ? `常规释义：${cached.translation}` : '';
+    } else {
+      sheetTransSourceLabel.innerHTML = '基础释义 <span style="font-size:10px; color:var(--text-muted);">(未开启AI)</span>';
+      sheetTransText.textContent = cached.translation || '轻点此处手动输入中文释义';
+    }
+    return;
+  }
+
+  // If DeepSeek API Key is configured, use DeepSeek
+  if (state.settings.deepseekKey) {
+    sheetTransSourceLabel.innerHTML = '🤖 DeepSeek AI 正在分析...';
+    sheetTransText.innerHTML = '<span style="color:var(--text-muted); font-size:13.5px;">结合上下文智能解析语境中...</span>';
+
+    try {
+      const aiData = await fetchDeepSeekDefinition(norm, contextSentence, state.settings.deepseekKey);
+      if (state.activeInspectorWord && state.activeInspectorWord.word === norm) {
+        if (aiData.phonetic) {
+          state.activeInspectorWord.phonetic = aiData.phonetic;
+          sheetPhonetic.textContent = aiData.phonetic;
+        }
+
+        sheetTransSourceLabel.innerHTML = '🤖 DeepSeek 语境分析 <span class="badge-ai">AI精准</span>';
+        if (aiData.contextMeaning) {
+          sheetAiContextBox.style.display = 'block';
+          sheetAiContextText.textContent = aiData.contextMeaning;
+        }
+        sheetTransText.textContent = aiData.translation ? `常规释义：${aiData.translation}` : '';
+        
+        // Combine for saved default note
+        const combinedTrans = aiData.contextMeaning 
+          ? `${aiData.contextMeaning}${aiData.translation ? ` (常: ${aiData.translation})` : ''}`
+          : aiData.translation;
+        state.activeInspectorWord.translation = combinedTrans;
+        sheetTransInput.value = combinedTrans;
+
+        state.setCached(norm, contextSentence, aiData);
       }
+      return;
+    } catch (err) {
+      console.warn('DeepSeek error, falling back:', err);
+      showToast(`DeepSeek 暂不可用: ${err.message || '网络错误'}`);
+    }
+  }
+
+  // Fallback to base lookup
+  sheetTransSourceLabel.innerHTML = '基础简明释义 <span style="font-size:10px; color:var(--text-muted);">(未配置AI)</span>';
+  sheetTransText.innerHTML = '<span style="color:var(--text-muted); font-size:13.5px;">正在查询释义...</span>';
+
+  const fetched = await fetchBaseDefinition(norm);
+  if (state.activeInspectorWord && state.activeInspectorWord.word === norm) {
+    if (fetched.phonetic) {
+      state.activeInspectorWord.phonetic = fetched.phonetic;
+      sheetPhonetic.textContent = fetched.phonetic;
+    }
+    if (fetched.translation) {
+      state.activeInspectorWord.translation = fetched.translation;
+      sheetTransText.innerHTML = `${escapeHtml(fetched.translation)}<div style="margin-top:8px; font-size:11.5px; color:var(--accent); line-height:1.4;">💡 提示：在【设置】填入 DeepSeek Key，即可开启结合上下文的 100% 精准释义！</div>`;
+      sheetTransInput.value = fetched.translation;
+      state.setCached(norm, contextSentence, fetched);
+    } else {
+      sheetTransText.innerHTML = `<span style="color:var(--text-muted);">暂无简明中文释义</span><div style="margin-top:8px; font-size:11.5px; color:var(--accent); line-height:1.4;">💡 在【设置】中配置 DeepSeek Key 即可秒出高精准释义</div>`;
+    }
+
+    // English definitions
+    if (fetched.meanings && fetched.meanings.length > 0) {
+      sheetDefsContainer.innerHTML = `
+        <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase;">英英简释</div>
+        ${fetched.meanings.map(m => `
+          <div class="def-item">
+            <span class="def-pos">${escapeHtml(m.partOfSpeech)}</span>
+            <span>${escapeHtml(m.definition)}</span>
+          </div>
+        `).join('')}
+      `;
     }
   }
 }
@@ -879,6 +1054,74 @@ function setupEventListeners() {
       state.saveSettings();
       applySettings();
     }
+  });
+
+  // DeepSeek Key Management
+  const inputKey = document.getElementById('inputDeepseekKey');
+  const btnToggleKey = document.getElementById('btnToggleKeyVisibility');
+  const btnSaveKey = document.getElementById('btnSaveDeepseekKey');
+  const btnClearKey = document.getElementById('btnClearDeepseekKey');
+  const testResult = document.getElementById('deepseekTestResult');
+
+  btnToggleKey?.addEventListener('click', () => {
+    if (inputKey.type === 'password') {
+      inputKey.type = 'text';
+      btnToggleKey.textContent = '🔒';
+    } else {
+      inputKey.type = 'password';
+      btnToggleKey.textContent = '👁️';
+    }
+  });
+
+  btnSaveKey?.addEventListener('click', async () => {
+    const key = inputKey ? inputKey.value.trim() : '';
+    if (!key) {
+      showToast('请输入有效的 DeepSeek API Key');
+      return;
+    }
+
+    btnSaveKey.disabled = true;
+    btnSaveKey.textContent = '测试连接中...';
+    if (testResult) {
+      testResult.style.display = 'block';
+      testResult.style.color = 'var(--text-muted)';
+      testResult.textContent = '⏳ 正在验证 API Key 连通性...';
+    }
+
+    try {
+      await testDeepSeekKey(key);
+      state.settings.deepseekKey = key;
+      state.saveSettings();
+      // Clear old cached lookups so fresh accurate AI definitions are fetched
+      state.cache = {};
+      try { localStorage.removeItem('minimal_word_cache'); } catch(e) {}
+
+      applySettings();
+      showToast('DeepSeek 连接成功！已开启 AI 语境查词');
+      if (testResult) {
+        testResult.style.color = 'var(--success)';
+        testResult.innerHTML = '✅ <strong>连接成功！</strong> DeepSeek AI 已就绪。返回文章轻点任意单词，即可享受结合上下文的精准释义。';
+      }
+    } catch (err) {
+      if (testResult) {
+        testResult.style.color = 'var(--danger)';
+        testResult.innerHTML = `❌ <strong>连接失败</strong>：${escapeHtml(err.message || '请检查网络或Key是否正确')}`;
+      }
+      showToast('API Key 验证失败');
+    } finally {
+      btnSaveKey.disabled = false;
+      btnSaveKey.textContent = '保存并测试连接';
+    }
+  });
+
+  btnClearKey?.addEventListener('click', () => {
+    if (!confirm('确定清除 DeepSeek API Key 吗？将恢复为基础离线查词。')) return;
+    state.settings.deepseekKey = '';
+    state.saveSettings();
+    if (inputKey) inputKey.value = '';
+    if (testResult) testResult.style.display = 'none';
+    applySettings();
+    showToast('已清除 DeepSeek Key');
   });
 
   // Backup: Export & Import

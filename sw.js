@@ -1,4 +1,4 @@
-const CACHE_NAME = 'minimal-english-reader-v1';
+const CACHE_NAME = 'minimal-english-reader-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -32,13 +32,13 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Pass API requests (like dictionary API) straight to network
-  if (event.request.url.includes('api.dictionaryapi.dev') || event.request.url.includes('mymemory.translated.net')) {
-    event.respondWith(
-      fetch(event.request).catch(() => new Response(JSON.stringify({ error: 'offline' }), {
-        headers: { 'Content-Type': 'application/json' }
-      }))
-    );
+  // Pass API requests (DeepSeek AI & Dictionary API) straight to network
+  if (
+    event.request.url.includes('api.deepseek.com') ||
+    event.request.url.includes('api.dictionaryapi.dev') ||
+    event.request.url.includes('mymemory.translated.net')
+  ) {
+    event.respondWith(fetch(event.request));
     return;
   }
 

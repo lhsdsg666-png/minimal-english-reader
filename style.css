@@ -599,6 +599,45 @@ html, body {
   line-height: 1.5;
 }
 
+/* AI Contextual Meaning Box */
+.sheet-context-meaning {
+  margin: 6px 0 10px 0;
+  padding: 10px 12px;
+  background-color: var(--accent-light);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+}
+
+.sheet-context-meaning-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0.3px;
+}
+
+.sheet-context-meaning-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.45;
+}
+
+.badge-ai {
+  background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+  color: #FFFFFF !important;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
 .sheet-translation-edit {
   display: none;
   width: 100%;

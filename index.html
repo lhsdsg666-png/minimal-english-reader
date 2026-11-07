@@ -102,8 +102,29 @@
         <input type="range" id="fontSizeSlider" min="15" max="24" value="18" step="1" style="accent-color: var(--accent); width: 100%;">
       </div>
 
+      <!-- DeepSeek AI Enhancement -->
       <div class="reader-settings-box">
-        <label class="form-label">数据备份与恢复 (100%手机本地隐私安全)</label>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <label class="form-label" style="margin:0; display:flex; align-items:center; gap:6px;">
+            <span>🤖 DeepSeek AI 语境查词</span>
+            <span class="brand-badge" id="deepseekStatusTag">未开启</span>
+          </label>
+        </div>
+        <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin: 8px 0 10px 0;">
+          结合文章上下文给出 100% 精准地道释义与音标，彻底解决传统查词生硬、一词多义搞不清的问题。API Key 仅保存在你的手机本地，不经过任何服务器。
+        </p>
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <input type="password" class="form-input" id="inputDeepseekKey" placeholder="在此粘贴你的 DeepSeek API Key (sk-...)" style="flex:1; font-family:monospace; font-size:12.5px;">
+          <button class="btn-secondary" id="btnToggleKeyVisibility" style="padding:0 10px;" title="显示/隐藏 Key">👁️</button>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-primary" id="btnSaveDeepseekKey" style="flex:1;">保存并测试连接</button>
+          <button class="btn-danger-outline" id="btnClearDeepseekKey" style="display:none;">清除</button>
+        </div>
+        <div id="deepseekTestResult" style="font-size: 12px; margin-top: 6px; display: none;"></div>
+      </div>
+
+      <div class="reader-settings-box">
         <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
           所有文章和生词都保存在您的手机浏览器中。您可以随时导出 JSON 备份，也可以随时一键恢复。
         </p>
@@ -243,9 +264,18 @@
       <!-- Chinese Translation / Meaning -->
       <div class="sheet-translation-box">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div class="sheet-translation-label">释义 / 笔记</div>
+          <div class="sheet-translation-label" id="sheetTransSourceLabel">释义 / 笔记</div>
           <button style="background:none; border:none; font-size:11px; color:var(--accent); cursor:pointer;" id="btnToggleEditDef">修改释义</button>
         </div>
+        
+        <!-- AI Contextual Meaning Box -->
+        <div id="sheetAiContextBox" class="sheet-context-meaning" style="display:none;">
+          <div class="sheet-context-meaning-label">
+            <span>✨ 本文语境释义</span>
+          </div>
+          <div class="sheet-context-meaning-text" id="sheetAiContextText"></div>
+        </div>
+
         <div class="sheet-translation-text" id="sheetTranslationText">查询中...</div>
         <input type="text" class="sheet-translation-edit" id="sheetTranslationInput" placeholder="自定义中文释义或记忆笔记...">
       </div>
